@@ -1,9 +1,12 @@
 #!/bin/bash
 # push-pr.sh - Full PR workflow automation
-# Usage: ./push-pr.sh "branch-name" "commit message"
+# Usage: ./push-pr.sh [--dir <path>] "branch-name" "commit message"
 #
 # Creates a branch, commits all changes, pushes, creates PR, and auto-merges.
 # Works from any git repo (main repo or submodule).
+#
+# Options:
+#   --dir <path>  Run in specified directory (e.g., a submodule)
 
 set -e
 
@@ -12,6 +15,19 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
+
+# Handle --dir option
+TARGET_DIR="."
+if [ "$1" = "--dir" ]; then
+    TARGET_DIR="$2"
+    shift 2
+fi
+
+# Change to target directory
+if [ "$TARGET_DIR" != "." ]; then
+    echo -e "${YELLOW}Changing to directory: $TARGET_DIR${NC}"
+    cd "$TARGET_DIR" || { echo -e "${RED}Error: Cannot cd to $TARGET_DIR${NC}"; exit 1; }
+fi
 
 # Check if we're in a git repository
 if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
