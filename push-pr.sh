@@ -18,18 +18,37 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Generate branch name from commit message
-# Format: 2026jan12-16-43-fix-bug-in-auth
+# Format: 2026jan12-16-43-fix-bug-auth (stopwords filtered, up to 6 words)
 generate_branch_name() {
     local msg="$1"
+
+    # Stopwords to filter out (common filler words)
+    local stopwords="for with to in on at as is the a an and or but"
 
     # Date: 2026jan12-16-43
     local datestamp=$(date +%Y)$(date +%b | tr '[:upper:]' '[:lower:]')$(date +%d-%H-%M)
 
-    # Clean message: keep only alphanumeric and spaces
-    local clean_msg=$(echo "$msg" | tr -cd 'a-zA-Z0-9 ')
+    # Clean message: keep only alphanumeric and spaces, convert to lowercase
+    local clean_msg=$(echo "$msg" | tr -cd 'a-zA-Z0-9 ' | tr '[:upper:]' '[:lower:]')
 
-    # Get first 4 words, convert to lowercase, join with hyphens
-    local words=$(echo "$clean_msg" | tr '[:upper:]' '[:lower:]' | awk '{for(i=1;i<=4&&i<=NF;i++) printf "%s%s", (i>1?"-":""), $i}')
+    # Filter out stopwords and get first 6 meaningful words
+    local words=$(echo "$clean_msg" | awk -v stops="$stopwords" '
+        BEGIN {
+            n = split(stops, arr)
+            for (i = 1; i <= n; i++) stopword[arr[i]] = 1
+        }
+        {
+            count = 0
+            result = ""
+            for (i = 1; i <= NF && count < 6; i++) {
+                if (!($i in stopword)) {
+                    result = (result == "" ? $i : result "-" $i)
+                    count++
+                }
+            }
+            print result
+        }
+    ')
 
     # Fallback if empty
     [ -z "$words" ] && words="update"
