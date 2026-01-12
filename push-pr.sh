@@ -1,8 +1,9 @@
 #!/bin/bash
 # push-pr.sh - Full PR workflow automation
-# Usage: ./push-pr.sh [--dir <path>] "branch-name" "commit message"
+# Usage: ./push-pr.sh [--dir <path>] "commit message"
 #
 # Creates a branch, commits all changes, pushes, creates PR, and auto-merges.
+# Branch name is auto-generated from commit message: 2026jan12-16-43-first-four-words
 # Works from any git repo (main repo or submodule).
 #
 # Options:
@@ -15,6 +16,26 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
+
+# Generate branch name from commit message
+# Format: 2026jan12-16-43-fix-bug-in-auth
+generate_branch_name() {
+    local msg="$1"
+
+    # Date: 2026jan12-16-43
+    local datestamp=$(date +%Y)$(date +%b | tr '[:upper:]' '[:lower:]')$(date +%d-%H-%M)
+
+    # Clean message: keep only alphanumeric and spaces
+    local clean_msg=$(echo "$msg" | tr -cd 'a-zA-Z0-9 ')
+
+    # Get first 4 words, convert to lowercase, join with hyphens
+    local words=$(echo "$clean_msg" | tr '[:upper:]' '[:lower:]' | awk '{for(i=1;i<=4&&i<=NF;i++) printf "%s%s", (i>1?"-":""), $i}')
+
+    # Fallback if empty
+    [ -z "$words" ] && words="update"
+
+    echo "${datestamp}-${words}"
+}
 
 # Handle --dir option
 TARGET_DIR="."
@@ -54,9 +75,9 @@ if git diff --quiet && git diff --cached --quiet; then
     exit 0
 fi
 
-# Set branch name and commit message
-BRANCH="${1:-$(date +%Yjan%d)-update}"
-MSG="${2:-Quick update}"
+# Set commit message and generate branch name
+MSG="${1:-Quick update}"
+BRANCH=$(generate_branch_name "$MSG")
 
 echo -e "${GREEN}Creating branch: $BRANCH${NC}"
 git checkout -b "$BRANCH"
