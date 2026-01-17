@@ -89,7 +89,7 @@ if [ "$CURRENT_BRANCH" != "main" ]; then
 fi
 
 # Check if there are any changes to commit
-if git diff --quiet && git diff --cached --quiet; then
+if [ -z "$(git status --porcelain)" ]; then
     echo -e "${YELLOW}No changes to commit. Exiting.${NC}"
     exit 0
 fi
