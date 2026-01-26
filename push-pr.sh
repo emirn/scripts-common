@@ -81,6 +81,17 @@ REPO_NAME=$(basename "$REPO_ROOT")
 
 echo -e "${YELLOW}Working in: ${REPO_NAME}${NC}"
 
+# Extract repository in OWNER/REPO format from git remote URL
+REMOTE_URL=$(git config --get remote.origin.url)
+REPO_FULL=$(echo "$REMOTE_URL" | sed 's|.*[:/]\([^/]*\)/\([^/]*\)\.git$|\1/\2|; s|.*[:/]\([^/]*\)/\([^/]*\)$|\1/\2|')
+
+if [ -z "$REPO_FULL" ]; then
+    echo -e "${RED}Error: Could not determine repository from remote URL${NC}"
+    exit 1
+fi
+
+echo -e "${YELLOW}Repository: ${REPO_FULL}${NC}"
+
 # Check if we're on main branch
 CURRENT_BRANCH=$(git branch --show-current)
 if [ "$CURRENT_BRANCH" != "main" ]; then
@@ -109,10 +120,10 @@ echo -e "${GREEN}Pushing to origin...${NC}"
 git push --set-upstream origin "$BRANCH"
 
 echo -e "${GREEN}Creating PR...${NC}"
-gh pr create --title "$MSG" --body "Automated PR via push-pr script" --base main
+gh pr create --repo "$REPO_FULL" --title "$MSG" --body "Automated PR via push-pr script" --base main
 
 echo -e "${GREEN}Enabling auto-merge...${NC}"
-gh pr merge --auto --squash --delete-branch
+gh pr merge --repo "$REPO_FULL" --auto --squash --delete-branch
 
 echo -e "${GREEN}Returning to main...${NC}"
 git checkout main
