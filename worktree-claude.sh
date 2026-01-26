@@ -24,6 +24,9 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Command to run in the worktree (customize as needed)
+CLAUDE_CMD="claude --dangerously-skip-permissions"
+
 # Generate branch name from description
 # Format: 2026jan26-14-30-fix-auth-bug (stopwords filtered, up to 6 words)
 generate_branch_name() {
@@ -203,13 +206,29 @@ fi
 echo -e "${GREEN}Worktree created successfully!${NC}"
 echo -e "  Path: ${BLUE}$WORKTREE_PATH${NC}"
 
+# Initialize submodules in the new worktree
+if [ -f "$WORKTREE_PATH/.gitmodules" ]; then
+    echo -e "${GREEN}Initializing submodules...${NC}"
+    (cd "$WORKTREE_PATH" && git submodule update --init --recursive)
+fi
+
 # Launch claude or just report success
 if [ "$NO_CLAUDE" = true ]; then
     echo -e "${GREEN}Done. To enter the worktree:${NC}"
     echo -e "  cd $WORKTREE_PATH"
 else
-    echo -e "${GREEN}Launching Claude Code...${NC}"
     cd "$WORKTREE_PATH" || { echo -e "${RED}Error: Cannot cd to worktree path: $WORKTREE_PATH${NC}"; exit 1; }
+    echo -e "${GREEN}Ready to launch Claude Code${NC}"
     echo -e "  Working directory: ${BLUE}$(pwd)${NC}"
-    exec claude --dangerously-skip-permissions
+    echo -e "  Command: ${YELLOW}${CLAUDE_CMD}${NC}"
+    echo ""
+    echo -n "Press Enter to run, or any other key to exit: "
+    read -r response
+    if [ -z "$response" ]; then
+        exec $CLAUDE_CMD
+    else
+        echo -e "${YELLOW}Exiting without running Claude.${NC}"
+        echo -e "To enter the worktree manually: cd $WORKTREE_PATH"
+        exit 0
+    fi
 fi
