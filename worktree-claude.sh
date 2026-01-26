@@ -25,7 +25,8 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Command to run in the worktree (customize as needed)
-CLAUDE_CMD="claude --dangerously-skip-permissions"
+# Using array syntax for proper argument handling
+START_CMD=(claude --dangerously-skip-permissions)
 
 # Generate branch name from description
 # Format: 2026jan26-14-30-fix-auth-bug (stopwords filtered, up to 6 words)
@@ -157,10 +158,10 @@ if [ -n "$(git status --porcelain)" ]; then
     echo -e "${YELLOW}These won't affect the new worktree, but you may want to commit or stash them.${NC}"
 fi
 
-# Check if claude command exists (unless --no-claude)
+# Check if start command exists (unless --no-claude)
 if [ "$NO_CLAUDE" = false ]; then
-    if ! command -v claude &> /dev/null; then
-        echo -e "${RED}Error: 'claude' command not found.${NC}"
+    if ! command -v "${START_CMD[0]}" &> /dev/null; then
+        echo -e "${RED}Error: '${START_CMD[0]}' command not found.${NC}"
         echo -e "${YELLOW}Install Claude Code: npm install -g @anthropic-ai/claude-code${NC}"
         exit 1
     fi
@@ -220,12 +221,12 @@ else
     cd "$WORKTREE_PATH" || { echo -e "${RED}Error: Cannot cd to worktree path: $WORKTREE_PATH${NC}"; exit 1; }
     echo -e "${GREEN}Ready to launch Claude Code${NC}"
     echo -e "  Working directory: ${BLUE}$(pwd)${NC}"
-    echo -e "  Command: ${YELLOW}${CLAUDE_CMD}${NC}"
+    echo -e "  Command: ${YELLOW}${START_CMD[*]}${NC}"
     echo ""
     echo -n "Press Enter to run, or any other key to exit: "
     read -r response
     if [ -z "$response" ]; then
-        exec $CLAUDE_CMD
+        exec "${START_CMD[@]}"
     else
         echo -e "${YELLOW}Exiting without running Claude.${NC}"
         echo -e "To enter the worktree manually: cd $WORKTREE_PATH"
