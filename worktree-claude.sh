@@ -121,14 +121,29 @@ REPO_NAME=$(basename "$REPO_ROOT")
 
 echo -e "${BLUE}Repository: ${REPO_NAME}${NC}"
 
-# Detect the main branch (main or master)
-if git show-ref --verify --quiet "refs/heads/main"; then
-    BASE_BRANCH="main"
-elif git show-ref --verify --quiet "refs/heads/master"; then
-    BASE_BRANCH="master"
-else
-    echo -e "${RED}Error: Neither 'main' nor 'master' branch exists.${NC}"
-    exit 1
+# Detect the main branch, preferring an up-to-date remote version
+BASE_BRANCH=""
+if git remote | grep -q '^origin$'; then
+    echo -e "${BLUE}Fetching from 'origin' remote to find an up-to-date base branch...${NC}"
+    git fetch origin --prune
+    if git show-ref --verify --quiet "refs/remotes/origin/main"; then
+        BASE_BRANCH="origin/main"
+    elif git show-ref --verify --quiet "refs/remotes/origin/master"; then
+        BASE_BRANCH="origin/master"
+    fi
+fi
+
+# If no remote branch found, fallback to local main/master
+if [ -z "$BASE_BRANCH" ]; then
+    if git show-ref --verify --quiet "refs/heads/main"; then
+        BASE_BRANCH="main"
+    elif git show-ref --verify --quiet "refs/heads/master"; then
+        BASE_BRANCH="master"
+    else
+        echo -e "${RED}Error: Neither 'main' nor 'master' branch found.${NC}"
+        echo -e "${YELLOW}Looked for 'main'/'master' on 'origin' remote and locally.${NC}"
+        exit 1
+    fi
 fi
 
 echo -e "${BLUE}Base branch: ${BASE_BRANCH}${NC}"
