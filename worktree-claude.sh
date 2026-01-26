@@ -209,6 +209,7 @@ if [ "$NO_CLAUDE" = true ]; then
     echo -e "  cd $WORKTREE_PATH"
 else
     echo -e "${GREEN}Launching Claude Code...${NC}"
-    cd "$WORKTREE_PATH"
+    cd "$WORKTREE_PATH" || { echo -e "${RED}Error: Cannot cd to worktree path: $WORKTREE_PATH${NC}"; exit 1; }
+    echo -e "  Working directory: ${BLUE}$(pwd)${NC}"
     exec claude --dangerously-skip-permissions
 fi
