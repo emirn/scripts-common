@@ -2,8 +2,9 @@
 # worktree-claude.sh - Create git worktree and launch Claude Code
 # Usage: ./worktree-claude.sh [--dir <path>] [--no-claude] "branch description"
 #
-# Creates a git worktree from the main branch with an auto-generated branch name,
+# Creates a git worktree based on main/master branch with an auto-generated branch name,
 # then launches Claude Code in that worktree for parallel AI development.
+# Works from any branch - always bases the new worktree on main or master.
 #
 # Options:
 #   --dir <path>    Run in specified directory instead of current directory
@@ -80,7 +81,7 @@ while [[ $# -gt 0 ]]; do
         -h|--help)
             echo "Usage: $0 [--dir <path>] [--no-claude] \"branch description\""
             echo ""
-            echo "Creates a git worktree from main branch and launches Claude Code."
+            echo "Creates a git worktree based on main/master and launches Claude Code."
             echo ""
             echo "Options:"
             echo "  --dir <path>    Run in specified directory"
@@ -120,18 +121,22 @@ REPO_NAME=$(basename "$REPO_ROOT")
 
 echo -e "${BLUE}Repository: ${REPO_NAME}${NC}"
 
-# Check if we're on main or master branch
-CURRENT_BRANCH=$(git branch --show-current)
-if [ "$CURRENT_BRANCH" != "main" ] && [ "$CURRENT_BRANCH" != "master" ]; then
-    echo -e "${RED}Error: Must be on 'main' or 'master' branch. Currently on '$CURRENT_BRANCH'.${NC}"
+# Detect the main branch (main or master)
+if git show-ref --verify --quiet "refs/heads/main"; then
+    BASE_BRANCH="main"
+elif git show-ref --verify --quiet "refs/heads/master"; then
+    BASE_BRANCH="master"
+else
+    echo -e "${RED}Error: Neither 'main' nor 'master' branch exists.${NC}"
     exit 1
 fi
 
-# Check for uncommitted changes (clean working tree required)
+echo -e "${BLUE}Base branch: ${BASE_BRANCH}${NC}"
+
+# Check for uncommitted changes (warn but proceed)
 if [ -n "$(git status --porcelain)" ]; then
-    echo -e "${RED}Error: Working tree has uncommitted changes.${NC}"
-    echo -e "${YELLOW}Please commit or stash your changes before creating a worktree.${NC}"
-    exit 1
+    echo -e "${YELLOW}Warning: Working tree has uncommitted changes.${NC}"
+    echo -e "${YELLOW}These won't affect the new worktree, but you may want to commit or stash them.${NC}"
 fi
 
 # Check if claude command exists (unless --no-claude)
@@ -176,8 +181,8 @@ if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
     echo -e "${YELLOW}Branch '$BRANCH' already exists, using it...${NC}"
     git worktree add "$WORKTREE_PATH" "$BRANCH"
 else
-    # Create new branch with worktree
-    git worktree add -b "$BRANCH" "$WORKTREE_PATH"
+    # Create new branch with worktree from the base branch
+    git worktree add -b "$BRANCH" "$WORKTREE_PATH" "$BASE_BRANCH"
 fi
 
 echo -e "${GREEN}Worktree created successfully!${NC}"
