@@ -1,13 +1,14 @@
 #!/bin/bash
 # push-pr.sh - Full PR workflow automation
-# Usage: ./push-pr.sh [--dir <path>] "commit message"
+# Usage: ./push-pr.sh [--dir <path>] [--files <path>...] "commit message"
 #
 # Creates a branch, commits all changes, pushes, creates PR, and auto-merges.
 # Branch name is auto-generated from commit message: 2026jan12-16-43-first-four-words
 # Works from any git repo (main repo or submodule).
 #
 # Options:
-#   --dir <path>  Run in specified directory (e.g., a submodule)
+#   --dir <path>        Run in specified directory (e.g., a submodule)
+#   --files <paths>...  Only stage these files/folders (everything after --files until the last arg)
 
 set -e
 
@@ -56,12 +57,29 @@ generate_branch_name() {
     echo "${datestamp}-${words}"
 }
 
-# Handle --dir option
+# Handle options
 TARGET_DIR="."
-if [ "$1" = "--dir" ]; then
-    TARGET_DIR="$2"
-    shift 2
-fi
+STAGE_FILES=()
+
+while [ $# -gt 1 ]; do
+    case "$1" in
+        --dir)
+            TARGET_DIR="$2"
+            shift 2
+            ;;
+        --files)
+            shift
+            # Collect all args until the last one (which is the commit message)
+            while [ $# -gt 1 ]; do
+                STAGE_FILES+=("$1")
+                shift
+            done
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
 
 # Change to target directory
 if [ "$TARGET_DIR" != "." ]; then
@@ -112,8 +130,14 @@ BRANCH=$(generate_branch_name "$MSG")
 echo -e "${GREEN}Creating branch: $BRANCH${NC}"
 git checkout -b "$BRANCH"
 
-echo -e "${GREEN}Staging all changes and committing...${NC}"
-git add .
+if [ ${#STAGE_FILES[@]} -gt 0 ]; then
+    echo -e "${GREEN}Staging specified files: ${STAGE_FILES[*]}${NC}"
+    git add "${STAGE_FILES[@]}"
+else
+    echo -e "${GREEN}Staging all changes...${NC}"
+    git add .
+fi
+echo -e "${GREEN}Committing...${NC}"
 git commit -m "$MSG"
 
 echo -e "${GREEN}Pushing to origin...${NC}"
