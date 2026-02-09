@@ -1,6 +1,6 @@
 #!/bin/bash
 # Update all git submodules including nested ones
-# Usage: ./shared-script/update-submodules.sh [--pull]
+# Usage: ./scripts-common/update-submodules.sh [--pull]
 #   --pull: Also pull latest commits for each submodule (default: just sync to recorded commits)
 
 set -e

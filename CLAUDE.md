@@ -67,5 +67,5 @@ git commit -m "Update shared-script submodule"
 
 Or use the script itself:
 ```bash
-./shared-script/update-submodules.sh --pull
+./scripts-common/update-submodules.sh --pull
 ```
