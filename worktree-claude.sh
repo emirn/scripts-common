@@ -341,7 +341,12 @@ echo -e "  Path: ${BLUE}$WORKTREE_PATH${NC}"
 # Initialize submodules in the new worktree
 if [ -f "$WORKTREE_PATH/.gitmodules" ]; then
     echo -e "${GREEN}Initializing submodules...${NC}"
-    (cd "$WORKTREE_PATH" && git submodule update --init --recursive)
+    # Step 1: Init top-level submodules (always works)
+    (cd "$WORKTREE_PATH" && git submodule update --init)
+    # Step 2: Try recursive for nested submodules, warn on failure
+    if ! (cd "$WORKTREE_PATH" && git submodule update --init --recursive) 2>/dev/null; then
+        echo -e "${YELLOW}Warning: Some nested submodules failed to initialize (this is usually safe to ignore)${NC}"
+    fi
 fi
 
 # Launch claude or just report success
