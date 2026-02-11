@@ -311,15 +311,8 @@ fi
 # Generate branch name from description
 BRANCH=$(generate_branch_name "$DESCRIPTION")
 
-# Calculate worktree path: ../<repo>-wt-<short-name>
-SHORT=$(short_name "$DESCRIPTION" 3)
-[ -z "$SHORT" ] && SHORT="worktree"
-WORKTREE_PATH="$(dirname "$REPO_ROOT")/${REPO_NAME}-wt-${SHORT}"
-
-# If that path exists, fall back to full branch name
-if [ -e "$WORKTREE_PATH" ]; then
-    WORKTREE_PATH="$(dirname "$REPO_ROOT")/${REPO_NAME}-${BRANCH}"
-fi
+# Calculate worktree path: ../<repo>-<branch>
+WORKTREE_PATH="$(dirname "$REPO_ROOT")/${REPO_NAME}-${BRANCH}"
 
 # Check if worktree path already exists
 if [ -e "$WORKTREE_PATH" ]; then

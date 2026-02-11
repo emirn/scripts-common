@@ -49,7 +49,7 @@ Creates a git worktree and launches Claude Code for parallel AI development.
 - `--cleanup` — List all worktrees, show merged/unmerged status, interactively remove them
 
 **What it does:**
-1. Creates worktree at `../<repo>-wt-<short-name>` based on `origin/main`
+1. Creates worktree at `../<repo>-<branch>` based on `origin/main`
 2. Initializes submodules in the new worktree
 3. Launches `claude --dangerously-skip-permissions` (unless `--no-claude`)
 
