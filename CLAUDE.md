@@ -10,6 +10,7 @@ Full PR workflow automation - creates branch, commits, pushes, creates PR, and a
 ```bash
 ./push-pr.sh "Your commit message"
 ./push-pr.sh --dir /path/to/repo "Commit message"  # Run in different directory
+./push-pr.sh --files src/app.ts src/utils.ts "Fix utils import"  # Stage specific files
 ```
 
 **Requirements:**
@@ -23,23 +24,39 @@ Full PR workflow automation - creates branch, commits, pushes, creates PR, and a
 3. Pushes to origin
 4. Creates PR via `gh pr create`
 5. Enables auto-merge with squash
-6. Returns to main branch
+6. Polls for merge completion (60s timeout, 5s intervals)
+7. Returns to main branch and cleans up local branch
+
+**Failure recovery:** If any step fails after branch creation, a trap automatically returns to `main` and prints cleanup instructions.
 
 ### worktree-claude.sh
 Creates a git worktree and launches Claude Code for parallel AI development.
 
 ```bash
 ./worktree-claude.sh "feature description"
-./worktree-claude.sh --no-claude "description"     # Don't launch Claude
-./worktree-claude.sh --dir /path/to/repo "desc"    # Run in different directory
+./worktree-claude.sh --no-claude "description"                    # Don't launch Claude
+./worktree-claude.sh --dir /path/to/repo "desc"                  # Run in different directory
+./worktree-claude.sh --prompt "fix the login bug" "fix login"     # Unattended mode
+./worktree-claude.sh --prompt "add tests" --print "add tests"     # Batch mode (stream-json)
+./worktree-claude.sh --cleanup                                    # Remove stale worktrees
 ```
 
+**Options:**
+- `--dir <path>` — Run in specified directory
+- `--no-claude` — Only create worktree, don't launch Claude
+- `--prompt <text>` — Pass initial task to Claude (`-p` flag), skips confirmation prompt
+- `--print` — Non-interactive batch mode (adds `--output-format stream-json`, use with `--prompt`)
+- `--cleanup` — List all worktrees, show merged/unmerged status, interactively remove them
+
 **What it does:**
-1. Creates worktree at `../<repo-name>-<branch>` based on `origin/main`
+1. Creates worktree at `../<repo>-wt-<short-name>` based on `origin/main`
 2. Initializes submodules in the new worktree
 3. Launches `claude --dangerously-skip-permissions` (unless `--no-claude`)
 
 **Use case:** Run multiple Claude Code sessions in parallel on different features.
+
+### _lib.sh
+Shared functions sourced by other scripts. Contains `generate_branch_name` and `short_name`.
 
 ### update-submodules.sh
 Updates all git submodules including nested ones.

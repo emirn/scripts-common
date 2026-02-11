@@ -12,50 +12,34 @@
 
 set -e
 
+# Source shared library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/_lib.sh"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Generate branch name from commit message
-# Format: 2026jan12-16-43-fix-bug-auth (stopwords filtered, up to 6 words)
-generate_branch_name() {
-    local msg="$1"
+# Track whether we're on a feature branch (for cleanup on failure)
+ON_FEATURE_BRANCH=false
+BRANCH=""
 
-    # Stopwords to filter out (common filler words)
-    local stopwords="for with to in on at as is the a an and or but"
-
-    # Date: 2026jan12-16-43
-    local datestamp=$(date +%Y)$(date +%b | tr '[:upper:]' '[:lower:]')$(date +%d-%H-%M)
-
-    # Clean message: keep only alphanumeric and spaces, convert to lowercase
-    local clean_msg=$(echo "$msg" | tr -cd 'a-zA-Z0-9 ' | tr '[:upper:]' '[:lower:]')
-
-    # Filter out stopwords and get first 6 meaningful words
-    local words=$(echo "$clean_msg" | awk -v stops="$stopwords" '
-        BEGIN {
-            n = split(stops, arr)
-            for (i = 1; i <= n; i++) stopword[arr[i]] = 1
-        }
-        {
-            count = 0
-            result = ""
-            for (i = 1; i <= NF && count < 6; i++) {
-                if (!($i in stopword)) {
-                    result = (result == "" ? $i : result "-" $i)
-                    count++
-                }
-            }
-            print result
-        }
-    ')
-
-    # Fallback if empty
-    [ -z "$words" ] && words="update"
-
-    echo "${datestamp}-${words}"
+cleanup_on_failure() {
+    local exit_code=$?
+    if [ "$exit_code" -ne 0 ] && [ "$ON_FEATURE_BRANCH" = true ]; then
+        echo ""
+        echo -e "${RED}Script failed while on branch '$BRANCH'.${NC}"
+        echo -e "${YELLOW}Returning to main branch...${NC}"
+        git checkout main 2>/dev/null || true
+        echo -e "${YELLOW}The feature branch '$BRANCH' still exists locally.${NC}"
+        echo -e "${YELLOW}To clean up manually:${NC}"
+        echo -e "${YELLOW}  git branch -d $BRANCH    # safe delete (only if merged)${NC}"
+        echo -e "${YELLOW}  git branch -D $BRANCH    # force delete${NC}"
+    fi
 }
+trap cleanup_on_failure EXIT
 
 # Handle options
 TARGET_DIR="."
@@ -129,6 +113,7 @@ BRANCH=$(generate_branch_name "$MSG")
 
 echo -e "${GREEN}Creating branch: $BRANCH${NC}"
 git checkout -b "$BRANCH"
+ON_FEATURE_BRANCH=true
 
 if [ ${#STAGE_FILES[@]} -gt 0 ]; then
     echo -e "${GREEN}Staging specified files: ${STAGE_FILES[*]}${NC}"
@@ -150,8 +135,48 @@ echo "$PR_URL"
 echo -e "${GREEN}Enabling auto-merge...${NC}"
 gh pr merge "$PR_URL" --auto --squash --delete-branch
 
-echo -e "${GREEN}Returning to main...${NC}"
-git checkout main
-git pull
+# Poll for merge completion (60s timeout, 5s intervals)
+echo -e "${GREEN}Waiting for merge...${NC}"
+TIMEOUT=60
+INTERVAL=5
+ELAPSED=0
+MERGED=false
 
-echo -e "${GREEN}Done! Changes merged to main.${NC}"
+while [ $ELAPSED -lt $TIMEOUT ]; do
+    sleep "$INTERVAL"
+    ELAPSED=$((ELAPSED + INTERVAL))
+    STATE=$(gh pr view "$PR_URL" --json state --jq '.state' 2>/dev/null || echo "UNKNOWN")
+
+    if [ "$STATE" = "MERGED" ]; then
+        MERGED=true
+        break
+    elif [ "$STATE" = "CLOSED" ]; then
+        echo -e "${RED}PR was closed without merging.${NC}"
+        echo -e "${YELLOW}Returning to main...${NC}"
+        git checkout main
+        ON_FEATURE_BRANCH=false
+        trap - EXIT
+        echo -e "${YELLOW}Local branch '$BRANCH' kept for inspection.${NC}"
+        exit 1
+    fi
+
+    echo -e "  ${YELLOW}Still waiting... (${ELAPSED}s/${TIMEOUT}s, state: $STATE)${NC}"
+done
+
+if [ "$MERGED" = true ]; then
+    echo -e "${GREEN}PR merged successfully!${NC}"
+    git checkout main
+    git pull
+    ON_FEATURE_BRANCH=false
+    trap - EXIT
+    # Safe delete — only works if branch is fully merged
+    git branch -d "$BRANCH" 2>/dev/null || true
+    echo -e "${GREEN}Done! Changes merged to main.${NC}"
+else
+    echo -e "${YELLOW}PR hasn't merged yet after ${TIMEOUT}s (auto-merge is enabled).${NC}"
+    echo -e "${YELLOW}This is normal for repos with branch protection rules or required checks.${NC}"
+    git checkout main
+    ON_FEATURE_BRANCH=false
+    trap - EXIT
+    echo -e "${YELLOW}Track progress: $PR_URL${NC}"
+fi
