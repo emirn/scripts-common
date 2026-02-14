@@ -1,14 +1,15 @@
 #!/bin/bash
 # push-pr.sh - Full PR workflow automation
-# Usage: ./push-pr.sh [--dir <path>] [--files <path>...] "commit message"
+# Usage: ./push-pr.sh [--dir <path>] [--files <path>...] [--no-wait] "commit message"
 #
-# Creates a branch, commits all changes, pushes, creates PR, and auto-merges.
+# Creates a branch, commits all changes, pushes, creates PR, and merges.
 # Branch name is auto-generated from commit message: 2026jan12-16-43-first-four-words
 # Works from any git repo (main repo or submodule).
 #
 # Options:
 #   --dir <path>        Run in specified directory (e.g., a submodule)
 #   --files <paths>...  Only stage these files/folders (everything after --files until the last arg)
+#   --no-wait           Skip polling for merge completion (recommended for CI/automation)
 
 set -e
 
@@ -22,34 +23,40 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Track whether we're on a feature branch (for cleanup on failure)
+# Track state for cleanup
 ON_FEATURE_BRANCH=false
 BRANCH=""
+ORIGINAL_BRANCH=""
 
-cleanup_on_failure() {
+cleanup() {
     local exit_code=$?
-    if [ "$exit_code" -ne 0 ] && [ "$ON_FEATURE_BRANCH" = true ]; then
+    if [ "$ON_FEATURE_BRANCH" = true ] && [ -n "$BRANCH" ]; then
         echo ""
-        echo -e "${RED}Script failed while on branch '$BRANCH'.${NC}"
-        echo -e "${YELLOW}Returning to main branch...${NC}"
-        git checkout main 2>/dev/null || true
-        echo -e "${YELLOW}The feature branch '$BRANCH' still exists locally.${NC}"
-        echo -e "${YELLOW}To clean up manually:${NC}"
-        echo -e "${YELLOW}  git branch -d $BRANCH    # safe delete (only if merged)${NC}"
+        echo -e "${RED}Script interrupted/failed while on branch '$BRANCH'.${NC}"
+        echo -e "${YELLOW}Returning to ${ORIGINAL_BRANCH:-main}...${NC}"
+        git checkout "${ORIGINAL_BRANCH:-main}" 2>/dev/null || true
+        ON_FEATURE_BRANCH=false
+        echo -e "${YELLOW}Local branch '$BRANCH' kept for inspection.${NC}"
         echo -e "${YELLOW}  git branch -D $BRANCH    # force delete${NC}"
     fi
+    echo -e "Branch: $(git branch --show-current 2>/dev/null || echo 'unknown')"
 }
-trap cleanup_on_failure EXIT
+trap cleanup EXIT INT TERM
 
 # Handle options
 TARGET_DIR="."
 STAGE_FILES=()
+NO_WAIT=false
 
 while [ $# -gt 1 ]; do
     case "$1" in
         --dir)
             TARGET_DIR="$2"
             shift 2
+            ;;
+        --no-wait)
+            NO_WAIT=true
+            shift
             ;;
         --files)
             shift
@@ -96,6 +103,7 @@ echo -e "${YELLOW}Repository: ${REPO_FULL}${NC}"
 
 # Check if we're on main branch
 CURRENT_BRANCH=$(git branch --show-current)
+ORIGINAL_BRANCH="$CURRENT_BRANCH"
 if [ "$CURRENT_BRANCH" != "main" ]; then
     echo -e "${RED}Error: Must be on 'main' branch. Currently on '$CURRENT_BRANCH'.${NC}"
     exit 1
@@ -132,51 +140,66 @@ echo -e "${GREEN}Creating PR...${NC}"
 PR_URL=$(gh pr create --repo "$REPO_FULL" --title "$MSG" --body "Automated PR via push-pr script" --base main)
 echo "$PR_URL"
 
-echo -e "${GREEN}Enabling auto-merge...${NC}"
-gh pr merge "$PR_URL" --auto --squash --delete-branch
+# KEY: Checkout main immediately after PR creation, before any merge attempt.
+# gh pr merge operates on the remote PR - it doesn't require being on the feature branch.
+# This ensures we're on main even if the script is killed during merge/polling.
+echo -e "${GREEN}Returning to main before merge...${NC}"
+git checkout main
+ON_FEATURE_BRANCH=false
 
-# Poll for merge completion (60s timeout, 5s intervals)
-echo -e "${GREEN}Waiting for merge...${NC}"
-TIMEOUT=60
-INTERVAL=5
-ELAPSED=0
-MERGED=false
-
-while [ $ELAPSED -lt $TIMEOUT ]; do
-    sleep "$INTERVAL"
-    ELAPSED=$((ELAPSED + INTERVAL))
-    STATE=$(gh pr view "$PR_URL" --json state --jq '.state' 2>/dev/null || echo "UNKNOWN")
-
-    if [ "$STATE" = "MERGED" ]; then
-        MERGED=true
-        break
-    elif [ "$STATE" = "CLOSED" ]; then
-        echo -e "${RED}PR was closed without merging.${NC}"
-        echo -e "${YELLOW}Returning to main...${NC}"
-        git checkout main
-        ON_FEATURE_BRANCH=false
-        trap - EXIT
-        echo -e "${YELLOW}Local branch '$BRANCH' kept for inspection.${NC}"
-        exit 1
-    fi
-
-    echo -e "  ${YELLOW}Still waiting... (${ELAPSED}s/${TIMEOUT}s, state: $STATE)${NC}"
-done
-
-if [ "$MERGED" = true ]; then
+# Try direct merge first (works for repos without branch protection)
+# Use explicit if/else instead of set -e to handle expected merge failures gracefully
+echo -e "${GREEN}Attempting direct merge...${NC}"
+if gh pr merge "$PR_URL" --squash --delete-branch 2>/dev/null; then
     echo -e "${GREEN}PR merged successfully!${NC}"
-    git checkout main
     git pull
-    ON_FEATURE_BRANCH=false
-    trap - EXIT
-    # Safe delete — only works if branch is fully merged
     git branch -d "$BRANCH" 2>/dev/null || true
     echo -e "${GREEN}Done! Changes merged to main.${NC}"
 else
-    echo -e "${YELLOW}PR hasn't merged yet after ${TIMEOUT}s (auto-merge is enabled).${NC}"
-    echo -e "${YELLOW}This is normal for repos with branch protection rules or required checks.${NC}"
-    git checkout main
-    ON_FEATURE_BRANCH=false
-    trap - EXIT
-    echo -e "${YELLOW}Track progress: $PR_URL${NC}"
+    # Direct merge failed — try auto-merge (for repos with branch protection / required checks)
+    echo -e "${YELLOW}Direct merge not available, trying auto-merge...${NC}"
+    if gh pr merge "$PR_URL" --auto --squash --delete-branch 2>/dev/null; then
+        echo -e "${GREEN}Auto-merge enabled on PR.${NC}"
+
+        if [ "$NO_WAIT" = true ]; then
+            echo -e "${YELLOW}--no-wait: skipping merge polling. Track progress: $PR_URL${NC}"
+        else
+            # Poll for merge completion (60s timeout, 5s intervals)
+            echo -e "${GREEN}Waiting for merge...${NC}"
+            TIMEOUT=60
+            INTERVAL=5
+            ELAPSED=0
+            MERGED=false
+
+            while [ $ELAPSED -lt $TIMEOUT ]; do
+                sleep "$INTERVAL"
+                ELAPSED=$((ELAPSED + INTERVAL))
+                STATE=$(gh pr view "$PR_URL" --json state --jq '.state' 2>/dev/null || echo "UNKNOWN")
+
+                if [ "$STATE" = "MERGED" ]; then
+                    MERGED=true
+                    break
+                elif [ "$STATE" = "CLOSED" ]; then
+                    echo -e "${RED}PR was closed without merging.${NC}"
+                    echo -e "${YELLOW}Local branch '$BRANCH' kept for inspection.${NC}"
+                    exit 1
+                fi
+
+                echo -e "  ${YELLOW}Still waiting... (${ELAPSED}s/${TIMEOUT}s, state: $STATE)${NC}"
+            done
+
+            if [ "$MERGED" = true ]; then
+                echo -e "${GREEN}PR merged successfully!${NC}"
+                git pull
+                git branch -d "$BRANCH" 2>/dev/null || true
+                echo -e "${GREEN}Done! Changes merged to main.${NC}"
+            else
+                echo -e "${YELLOW}PR hasn't merged yet after ${TIMEOUT}s (auto-merge is enabled).${NC}"
+                echo -e "${YELLOW}Track progress: $PR_URL${NC}"
+            fi
+        fi
+    else
+        echo -e "${YELLOW}Could not merge or enable auto-merge.${NC}"
+        echo -e "${YELLOW}PR created and ready for manual review: $PR_URL${NC}"
+    fi
 fi

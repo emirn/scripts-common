@@ -5,13 +5,19 @@ Reusable shell scripts for git workflow automation. Designed to work as a git su
 ## Scripts
 
 ### push-pr.sh
-Full PR workflow automation - creates branch, commits, pushes, creates PR, and auto-merges.
+Full PR workflow automation - creates branch, commits, pushes, creates PR, and merges.
 
 ```bash
 ./push-pr.sh "Your commit message"
 ./push-pr.sh --dir /path/to/repo "Commit message"  # Run in different directory
 ./push-pr.sh --files src/app.ts src/utils.ts "Fix utils import"  # Stage specific files
+./push-pr.sh --no-wait --dir sites/example.com "Quick update"  # Fast mode (recommended for Claude)
 ```
+
+**Options:**
+- `--dir <path>` — Run in specified directory (e.g., a submodule)
+- `--files <paths>...` — Only stage these files/folders (everything after --files until the last arg)
+- `--no-wait` — Skip polling for merge completion (recommended for automation/Claude usage)
 
 **Requirements:**
 - Must be on `main` branch
@@ -23,11 +29,14 @@ Full PR workflow automation - creates branch, commits, pushes, creates PR, and a
 2. Creates branch and commits all changes
 3. Pushes to origin
 4. Creates PR via `gh pr create`
-5. Enables auto-merge with squash
-6. Polls for merge completion (60s timeout, 5s intervals)
-7. Returns to main branch and cleans up local branch
+5. Returns to `main` immediately (before merge attempt)
+6. Tries direct squash merge first (instant for repos without branch protection)
+7. Falls back to auto-merge if direct merge unavailable
+8. Optionally polls for merge completion (skipped with `--no-wait`)
 
-**Failure recovery:** If any step fails after branch creation, a trap automatically returns to `main` and prints cleanup instructions.
+**Key design:** The script checks out `main` right after creating the PR, before attempting any merge. This ensures the repo is always on `main` even if the script is interrupted or times out.
+
+**Failure recovery:** Traps EXIT, INT, and TERM signals. If interrupted while on the feature branch, automatically returns to `main` and prints cleanup instructions.
 
 ### worktree-claude.sh
 Creates a git worktree and launches Claude Code for parallel AI development.
