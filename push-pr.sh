@@ -21,7 +21,27 @@ source "$SCRIPT_DIR/_lib.sh"
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BOLD='\033[1m'
 NC='\033[0m' # No Color
+
+notify_merge_failure() {
+    local pr_url="$1"
+    local repo="$2"
+    echo ""
+    echo -e "${RED}${BOLD}====================================================${NC}"
+    echo -e "${RED}${BOLD}  MERGE FAILED - NEEDS MANUAL INTERVENTION${NC}"
+    echo -e "${RED}${BOLD}  Repo: ${repo}${NC}"
+    echo -e "${RED}${BOLD}  PR:   ${pr_url}${NC}"
+    echo -e "${RED}${BOLD}====================================================${NC}"
+    echo ""
+    echo "NEEDS_MANUAL_MERGE: ${pr_url}"
+    # Terminal bell
+    printf '\a'
+    # macOS notification
+    if command -v osascript &>/dev/null; then
+        osascript -e "display notification \"PR needs manual merge in ${repo}\" with title \"Merge Failed\" sound name \"Basso\"" 2>/dev/null || true
+    fi
+}
 
 # Track state for cleanup
 ON_FEATURE_BRANCH=false
@@ -194,12 +214,14 @@ else
                 git branch -d "$BRANCH" 2>/dev/null || true
                 echo -e "${GREEN}Done! Changes merged to main.${NC}"
             else
-                echo -e "${YELLOW}PR hasn't merged yet after ${TIMEOUT}s (auto-merge is enabled).${NC}"
+                echo -e "${YELLOW}---${NC}"
+                echo -e "${YELLOW}${BOLD}PR hasn't merged yet after ${TIMEOUT}s (auto-merge is enabled).${NC}"
                 echo -e "${YELLOW}Track progress: $PR_URL${NC}"
+                echo "AUTO_MERGE_PENDING: ${PR_URL}"
             fi
         fi
     else
-        echo -e "${YELLOW}Could not merge or enable auto-merge.${NC}"
-        echo -e "${YELLOW}PR created and ready for manual review: $PR_URL${NC}"
+        notify_merge_failure "$PR_URL" "$REPO_NAME"
+        exit 1
     fi
 fi
