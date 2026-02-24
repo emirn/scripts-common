@@ -10,6 +10,8 @@
 #   --dir <path>       Run in specified directory instead of current directory
 #   --no-claude        Only create worktree, don't launch Claude Code
 #   --prompt <text>    Pass initial task to Claude (unattended, skips confirmation)
+#   --plan <path>      Copy plan file into worktree as PLAN.md, auto-set prompt to implement it
+#   --tab              Open a new iTerm2 tab instead of running in the current terminal
 #   --print            Non-interactive batch mode (use with --prompt, adds stream-json output)
 #   --cleanup          List and remove stale worktrees, then exit
 #
@@ -18,6 +20,7 @@
 #   worktree-claude.sh --dir /path/to/repo "add new feature"
 #   worktree-claude.sh --no-claude "refactor database"
 #   worktree-claude.sh --prompt "fix the login validation bug" "fix login"
+#   worktree-claude.sh --plan ~/.claude/plans/my-plan.md --tab "audit-log-fix"
 #   worktree-claude.sh --cleanup
 
 set -e
@@ -165,6 +168,8 @@ do_cleanup() {
 TARGET_DIR="."
 NO_CLAUDE=false
 PROMPT_TEXT=""
+PLAN_FILE=""
+NEW_TAB=false
 PRINT_MODE=false
 DO_CLEANUP=false
 DESCRIPTION=""
@@ -183,6 +188,14 @@ while [[ $# -gt 0 ]]; do
             PROMPT_TEXT="$2"
             shift 2
             ;;
+        --plan)
+            PLAN_FILE="$2"
+            shift 2
+            ;;
+        --tab)
+            NEW_TAB=true
+            shift
+            ;;
         --print)
             PRINT_MODE=true
             shift
@@ -200,6 +213,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --dir <path>       Run in specified directory"
             echo "  --no-claude        Only create worktree, don't launch Claude"
             echo "  --prompt <text>    Pass initial task to Claude (skips confirmation)"
+            echo "  --plan <path>      Copy plan file into worktree as PLAN.md, auto-set prompt"
+            echo "  --tab              Open a new iTerm2 tab instead of current terminal"
             echo "  --print            Non-interactive batch mode (use with --prompt)"
             echo "  --cleanup          List and remove stale worktrees"
             echo "  -h, --help         Show this help message"
@@ -209,6 +224,7 @@ while [[ $# -gt 0 ]]; do
             echo "  $0 --dir /path/to/repo \"add new feature\""
             echo "  $0 --no-claude \"refactor database\""
             echo "  $0 --prompt \"fix the login validation bug\" \"fix login\""
+            echo "  $0 --plan ~/.claude/plans/my-plan.md --tab \"audit-log-fix\""
             echo "  $0 --cleanup"
             exit 0
             ;;
@@ -231,6 +247,16 @@ fi
 if [ "$DO_CLEANUP" = true ]; then
     do_cleanup
     exit 0
+fi
+
+# Validate --plan file exists
+if [ -n "$PLAN_FILE" ]; then
+    # Expand ~ in path
+    PLAN_FILE="${PLAN_FILE/#\~/$HOME}"
+    if [ ! -f "$PLAN_FILE" ]; then
+        echo -e "${RED}Error: Plan file not found: $PLAN_FILE${NC}"
+        exit 1
+    fi
 fi
 
 # Check if we're in a git repository
@@ -349,14 +375,58 @@ if [ -f "$WORKTREE_PATH/.gitmodules" ]; then
     fi
 fi
 
+# Copy plan file into worktree and auto-set prompt if --plan provided
+if [ -n "$PLAN_FILE" ]; then
+    cp "$PLAN_FILE" "$WORKTREE_PATH/PLAN.md"
+    echo -e "${GREEN}Copied plan file to PLAN.md${NC}"
+
+    # Auto-set prompt if not already provided via --prompt
+    if [ -z "$PROMPT_TEXT" ]; then
+        PROMPT_TEXT="Implement the following plan:\n\n$(cat "$PLAN_FILE")"
+        # Rebuild START_CMD with the auto-generated prompt
+        START_CMD=(claude --dangerously-skip-permissions -p "$PROMPT_TEXT")
+        if [ "$PRINT_MODE" = true ]; then
+            START_CMD+=(--output-format stream-json)
+        fi
+    fi
+fi
+
 # Launch claude or just report success
 if [ "$NO_CLAUDE" = true ]; then
     echo -e "${GREEN}Done. To enter the worktree:${NC}"
     echo -e "  cd $WORKTREE_PATH"
+elif [ "$NEW_TAB" = true ]; then
+    # Write a launcher script to avoid AppleScript escaping issues with complex prompts
+    LAUNCHER="$WORKTREE_PATH/.claude-launch.sh"
+    {
+        echo '#!/bin/bash'
+        echo "cd $(printf '%q' "$WORKTREE_PATH")"
+        printf 'exec'
+        for arg in "${START_CMD[@]}"; do
+            printf ' %q' "$arg"
+        done
+        printf '\n'
+    } > "$LAUNCHER"
+    chmod +x "$LAUNCHER"
+
+    echo -e "${GREEN}Opening new iTerm2 tab...${NC}"
+    echo -e "  Working directory: ${BLUE}$WORKTREE_PATH${NC}"
+    echo -e "  Command: ${YELLOW}${START_CMD[*]}${NC}"
+    osascript -e "
+        tell application \"iTerm2\"
+            tell current window
+                create tab with default profile
+                tell current session
+                    write text \"$(printf '%q' "$LAUNCHER")\"
+                end tell
+            end tell
+        end tell
+    "
+    echo -e "${GREEN}Done. Claude is running in a new iTerm2 tab.${NC}"
 else
     cd "$WORKTREE_PATH" || { echo -e "${RED}Error: Cannot cd to worktree path: $WORKTREE_PATH${NC}"; exit 1; }
 
-    # If --prompt was given, launch immediately (no confirmation)
+    # If --prompt or --plan was given, launch immediately (no confirmation)
     if [ -n "$PROMPT_TEXT" ]; then
         echo -e "${GREEN}Launching Claude Code with prompt...${NC}"
         echo -e "  Working directory: ${BLUE}$(pwd)${NC}"

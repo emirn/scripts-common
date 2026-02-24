@@ -25,7 +25,7 @@ Full PR workflow automation - creates branch, commits, pushes, creates PR, and m
 - Changes to commit
 
 **What it does:**
-1. Generates branch name from commit message (e.g., `2026jan28-15-09-fix-bug-auth`)
+1. Generates branch name from commit message (e.g., `2026-jan-28-150912-fix-bug-auth`)
 2. Creates branch and commits all changes
 3. Pushes to origin
 4. Creates PR via `gh pr create`
@@ -47,6 +47,8 @@ Creates a git worktree and launches Claude Code for parallel AI development.
 ./worktree-claude.sh --dir /path/to/repo "desc"                  # Run in different directory
 ./worktree-claude.sh --prompt "fix the login bug" "fix login"     # Unattended mode
 ./worktree-claude.sh --prompt "add tests" --print "add tests"     # Batch mode (stream-json)
+./worktree-claude.sh --plan ~/.claude/plans/my-plan.md "desc"     # Copy plan + auto-prompt
+./worktree-claude.sh --plan ~/.claude/plans/my-plan.md --tab "d"  # Plan in new iTerm2 tab
 ./worktree-claude.sh --cleanup                                    # Remove stale worktrees
 ```
 
@@ -54,6 +56,8 @@ Creates a git worktree and launches Claude Code for parallel AI development.
 - `--dir <path>` — Run in specified directory
 - `--no-claude` — Only create worktree, don't launch Claude
 - `--prompt <text>` — Pass initial task to Claude (`-p` flag), skips confirmation prompt
+- `--plan <path>` — Copy plan file into worktree as `PLAN.md`, auto-set prompt to implement it
+- `--tab` — Open a new iTerm2 tab instead of running in the current terminal
 - `--print` — Non-interactive batch mode (adds `--output-format stream-json`, use with `--prompt`)
 - `--cleanup` — List all worktrees, show merged/unmerged status, interactively remove them
 

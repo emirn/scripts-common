@@ -3,7 +3,7 @@
 # Source this file: source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_lib.sh"
 
 # Generate branch name from a description string
-# Format: 2026jan12-16-43-fix-bug-auth (stopwords filtered, up to 6 words)
+# Format: 2026-feb-24-164312-fix-bug-auth (stopwords filtered, up to 6 words)
 # Usage: BRANCH=$(generate_branch_name "fix the auth bug in login")
 generate_branch_name() {
     local msg="$1"
@@ -11,8 +11,8 @@ generate_branch_name() {
     # Stopwords to filter out (common filler words)
     local stopwords="for with to in on at as is the a an and or but"
 
-    # Date: 2026jan12-16-43
-    local datestamp=$(date +%Y)$(date +%b | tr '[:upper:]' '[:lower:]')$(date +%d-%H-%M)
+    # Date: 2026-feb-24-164312
+    local datestamp=$(date +%Y-)$(date +%b | tr '[:upper:]' '[:lower:]')$(date +-%d-%H%M%S)
 
     # Clean message: keep only alphanumeric and spaces, convert to lowercase
     local clean_msg=$(echo "$msg" | tr -cd 'a-zA-Z0-9 ' | tr '[:upper:]' '[:lower:]')
