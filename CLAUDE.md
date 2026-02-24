@@ -41,13 +41,14 @@ Full PR workflow automation - creates branch, commits, pushes, creates PR, and m
 ### worktree-claude.sh
 Creates a git worktree and launches Claude Code for parallel AI development.
 
+Claude always runs **interactively** (no `-p` flag). The `--prompt` and `--plan` flags control what gets auto-typed into the session after Claude starts.
+
 ```bash
 ./worktree-claude.sh "feature description"
 ./worktree-claude.sh --no-claude "description"                    # Don't launch Claude
 ./worktree-claude.sh --dir /path/to/repo "desc"                  # Run in different directory
-./worktree-claude.sh --prompt "fix the login bug" "fix login"     # Unattended mode
-./worktree-claude.sh --prompt "add tests" --print "add tests"     # Batch mode (stream-json)
-./worktree-claude.sh --plan ~/.claude/plans/my-plan.md "desc"     # Copy plan + auto-prompt
+./worktree-claude.sh --prompt "fix the login bug" "fix login"     # Auto-type prompt after start
+./worktree-claude.sh --plan ~/.claude/plans/my-plan.md "desc"     # Copy plan + auto-type instruction
 ./worktree-claude.sh --plan ~/.claude/plans/my-plan.md --tab "d"  # Plan in new iTerm2 tab
 ./worktree-claude.sh --cleanup                                    # Remove stale worktrees
 ```
@@ -55,16 +56,18 @@ Creates a git worktree and launches Claude Code for parallel AI development.
 **Options:**
 - `--dir <path>` — Run in specified directory
 - `--no-claude` — Only create worktree, don't launch Claude
-- `--prompt <text>` — Pass initial task to Claude (`-p` flag), skips confirmation prompt
-- `--plan <path>` — Copy plan file into worktree as `PLAN.md`, auto-set prompt to implement it
-- `--tab` — Open a new iTerm2 tab instead of running in the current terminal
-- `--print` — Non-interactive batch mode (adds `--output-format stream-json`, use with `--prompt`)
+- `--prompt <text>` — Auto-type this text into Claude after it starts (in `--tab` mode; printed for copy-paste otherwise)
+- `--plan <path>` — Copy plan file into worktree as `.temp-plan.md` (gitignored), auto-type instruction to implement it
+- `--tab` — Open a new iTerm2 tab (named `reponame: description`), cd into worktree, launch Claude
+- `--print` — Add `--output-format stream-json` to Claude command
 - `--cleanup` — List all worktrees, show merged/unmerged status, interactively remove them
 
 **What it does:**
 1. Creates worktree at `../<repo>-<branch>` based on `origin/main`
 2. Initializes submodules in the new worktree
-3. Launches `claude --dangerously-skip-permissions` (unless `--no-claude`)
+3. If `--plan`: copies plan as `.temp-plan.md` and adds it to `.gitignore`
+4. Launches `claude --dangerously-skip-permissions` interactively (unless `--no-claude`)
+5. In `--tab` mode: sets iTerm2 tab name, cd's into worktree, auto-types prompt after 3s delay
 
 **Use case:** Run multiple Claude Code sessions in parallel on different features.
 
