@@ -381,8 +381,9 @@ if [ -n "$PLAN_FILE" ]; then
     echo -e "${GREEN}Copied plan file to PLAN.md${NC}"
 
     # Auto-set prompt if not already provided via --prompt
+    # Use a short prompt that references the file — avoids shell escaping issues with large plan content
     if [ -z "$PROMPT_TEXT" ]; then
-        PROMPT_TEXT="Implement the following plan:\n\n$(cat "$PLAN_FILE")"
+        PROMPT_TEXT="Read PLAN.md in the project root and implement the plan described in it."
         # Rebuild START_CMD with the auto-generated prompt
         START_CMD=(claude --dangerously-skip-permissions -p "$PROMPT_TEXT")
         if [ "$PRINT_MODE" = true ]; then
