@@ -9,11 +9,14 @@
 # Options:
 #   --dir <path>       Run in specified directory instead of current directory
 #   --no-claude        Only create worktree, don't launch Claude Code
-#   --prompt <text>    Pass initial task to Claude (unattended, skips confirmation)
-#   --plan <path>      Copy plan file into worktree as PLAN.md, auto-set prompt to implement it
+#   --prompt <text>    Auto-type this text into Claude after it starts (interactive mode)
+#   --plan <path>      Copy plan file into worktree as .temp-plan.md, auto-type instruction to implement it
 #   --tab              Open a new iTerm2 tab instead of running in the current terminal
-#   --print            Non-interactive batch mode (use with --prompt, adds stream-json output)
+#   --print            Add --output-format stream-json to Claude command
 #   --cleanup          List and remove stale worktrees, then exit
+#
+# Claude always runs interactively (no -p flag). --prompt and --plan control what gets
+# auto-typed into the session after Claude starts.
 #
 # Examples:
 #   worktree-claude.sh "fix auth bug"
@@ -212,10 +215,10 @@ while [[ $# -gt 0 ]]; do
             echo "Options:"
             echo "  --dir <path>       Run in specified directory"
             echo "  --no-claude        Only create worktree, don't launch Claude"
-            echo "  --prompt <text>    Pass initial task to Claude (skips confirmation)"
-            echo "  --plan <path>      Copy plan file into worktree as PLAN.md, auto-set prompt"
+            echo "  --prompt <text>    Auto-type this text into Claude after it starts"
+            echo "  --plan <path>      Copy plan file as .temp-plan.md, auto-type instruction"
             echo "  --tab              Open a new iTerm2 tab instead of current terminal"
-            echo "  --print            Non-interactive batch mode (use with --prompt)"
+            echo "  --print            Add --output-format stream-json to Claude command"
             echo "  --cleanup          List and remove stale worktrees"
             echo "  -h, --help         Show this help message"
             echo ""
@@ -304,14 +307,15 @@ if [ -n "$(git status --porcelain)" ]; then
     echo -e "${YELLOW}These won't affect the new worktree, but you may want to commit or stash them.${NC}"
 fi
 
-# Build START_CMD array dynamically
+# Build START_CMD array dynamically — always interactive (no -p flag)
 START_CMD=(claude --dangerously-skip-permissions)
+AUTO_TYPE=""
 
 if [ -n "$PROMPT_TEXT" ]; then
-    START_CMD+=(-p "$PROMPT_TEXT")
+    AUTO_TYPE="$PROMPT_TEXT"
 fi
 
-if [ "$PRINT_MODE" = true ] && [ -n "$PROMPT_TEXT" ]; then
+if [ "$PRINT_MODE" = true ]; then
     START_CMD+=(--output-format stream-json)
 fi
 
@@ -377,18 +381,19 @@ fi
 
 # Copy plan file into worktree and auto-set prompt if --plan provided
 if [ -n "$PLAN_FILE" ]; then
-    cp "$PLAN_FILE" "$WORKTREE_PATH/PLAN.md"
-    echo -e "${GREEN}Copied plan file to PLAN.md${NC}"
+    cp "$PLAN_FILE" "$WORKTREE_PATH/.temp-plan.md"
+    echo -e "${GREEN}Copied plan file to .temp-plan.md${NC}"
 
-    # Auto-set prompt if not already provided via --prompt
-    # Use a short prompt that references the file — avoids shell escaping issues with large plan content
-    if [ -z "$PROMPT_TEXT" ]; then
-        PROMPT_TEXT="Read PLAN.md in the project root and implement the plan described in it."
-        # Rebuild START_CMD with the auto-generated prompt
-        START_CMD=(claude --dangerously-skip-permissions -p "$PROMPT_TEXT")
-        if [ "$PRINT_MODE" = true ]; then
-            START_CMD+=(--output-format stream-json)
-        fi
+    # Add .temp-plan.md to .gitignore if not already present
+    GITIGNORE="$WORKTREE_PATH/.gitignore"
+    if [ ! -f "$GITIGNORE" ] || ! grep -qxF '.temp-plan.md' "$GITIGNORE"; then
+        echo '.temp-plan.md' >> "$GITIGNORE"
+        echo -e "${GREEN}Added .temp-plan.md to .gitignore${NC}"
+    fi
+
+    # Auto-set auto-type text if not already provided via --prompt
+    if [ -z "$AUTO_TYPE" ]; then
+        AUTO_TYPE="Read .temp-plan.md in the project root and implement the plan described in it."
     fi
 fi
 
@@ -397,41 +402,55 @@ if [ "$NO_CLAUDE" = true ]; then
     echo -e "${GREEN}Done. To enter the worktree:${NC}"
     echo -e "  cd $WORKTREE_PATH"
 elif [ "$NEW_TAB" = true ]; then
-    # Write a launcher script to avoid AppleScript escaping issues with complex prompts
-    LAUNCHER="$WORKTREE_PATH/.claude-launch.sh"
-    {
-        echo '#!/bin/bash'
-        echo "cd $(printf '%q' "$WORKTREE_PATH")"
-        printf 'exec'
-        for arg in "${START_CMD[@]}"; do
-            printf ' %q' "$arg"
-        done
-        printf '\n'
-    } > "$LAUNCHER"
-    chmod +x "$LAUNCHER"
+    TAB_NAME="${REPO_NAME}: ${DESCRIPTION}"
+    CLAUDE_CMD="cd $(printf '%q' "$WORKTREE_PATH") && ${START_CMD[*]}"
 
     echo -e "${GREEN}Opening new iTerm2 tab...${NC}"
+    echo -e "  Tab name: ${BLUE}$TAB_NAME${NC}"
     echo -e "  Working directory: ${BLUE}$WORKTREE_PATH${NC}"
     echo -e "  Command: ${YELLOW}${START_CMD[*]}${NC}"
-    osascript -e "
+
+    # Build AppleScript — optionally include auto-type after delay
+    APPLESCRIPT="
         tell application \"iTerm2\"
             tell current window
                 create tab with default profile
+                tell current tab
+                    set name to \"${TAB_NAME}\"
+                end tell
                 tell current session
-                    write text \"$(printf '%q' "$LAUNCHER")\"
+                    write text \"${CLAUDE_CMD}\""
+
+    if [ -n "$AUTO_TYPE" ]; then
+        # Escape backslashes and double quotes for AppleScript string
+        ESCAPED_AUTO_TYPE="${AUTO_TYPE//\\/\\\\}"
+        ESCAPED_AUTO_TYPE="${ESCAPED_AUTO_TYPE//\"/\\\"}"
+        APPLESCRIPT+="
+                    delay 3
+                    write text \"${ESCAPED_AUTO_TYPE}\""
+    fi
+
+    APPLESCRIPT+="
                 end tell
             end tell
-        end tell
-    "
+        end tell"
+
+    osascript -e "$APPLESCRIPT"
     echo -e "${GREEN}Done. Claude is running in a new iTerm2 tab.${NC}"
 else
     cd "$WORKTREE_PATH" || { echo -e "${RED}Error: Cannot cd to worktree path: $WORKTREE_PATH${NC}"; exit 1; }
 
     # If --prompt or --plan was given, launch immediately (no confirmation)
-    if [ -n "$PROMPT_TEXT" ]; then
-        echo -e "${GREEN}Launching Claude Code with prompt...${NC}"
+    if [ -n "$AUTO_TYPE" ]; then
+        echo -e "${GREEN}Launching Claude Code interactively...${NC}"
         echo -e "  Working directory: ${BLUE}$(pwd)${NC}"
         echo -e "  Command: ${YELLOW}${START_CMD[*]}${NC}"
+        # In non-tab mode we can't auto-type after exec (exec replaces process),
+        # so print the prompt for the user to paste
+        echo ""
+        echo -e "${YELLOW}Auto-type prompt ready — paste into Claude:${NC}"
+        echo -e "${BLUE}${AUTO_TYPE}${NC}"
+        echo ""
         exec "${START_CMD[@]}"
     fi
 
