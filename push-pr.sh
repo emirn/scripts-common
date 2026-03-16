@@ -129,6 +129,10 @@ if [ "$CURRENT_BRANCH" != "main" ]; then
     exit 1
 fi
 
+# Pull latest (picks up version-bump commits from CI)
+echo -e "${GREEN}Pulling latest...${NC}"
+git pull
+
 # Check if there are any changes to commit
 if [ -z "$(git status --porcelain)" ]; then
     echo -e "${YELLOW}No changes to commit. Exiting.${NC}"
