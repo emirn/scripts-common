@@ -35,30 +35,35 @@ fi
 echo -e "${GREEN}Pulling latest from main...${NC}"
 git pull
 
-# Read version
-VERSION=$(cat VERSION | tr -d '[:space:]')
+# Bump patch version
+CURRENT_VERSION=$(cat VERSION | tr -d '[:space:]')
+MAJOR=$(echo "$CURRENT_VERSION" | cut -d. -f1)
+MINOR=$(echo "$CURRENT_VERSION" | cut -d. -f2)
+PATCH=$(echo "$CURRENT_VERSION" | cut -d. -f3)
+VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
+echo "$VERSION" > VERSION
+
 TAG="production-v${VERSION}"
 
-echo -e "${BOLD}Version: ${VERSION}${NC}"
+echo -e "${BOLD}Current: ${CURRENT_VERSION}${NC}"
+echo -e "${BOLD}New:     ${VERSION}${NC}"
 echo -e "${BOLD}Tag:     ${TAG}${NC}"
-
-# Check if tag already exists
-if git tag -l "$TAG" | grep -q "$TAG"; then
-    echo -e "${RED}Error: Tag '$TAG' already exists. This version has already been deployed.${NC}"
-    echo -e "${YELLOW}Current VERSION file: ${VERSION}${NC}"
-    echo -e "${YELLOW}To deploy a new version, merge a PR first (auto-bumps version).${NC}"
-    exit 1
-fi
 
 # Confirm
 echo ""
-echo -e "${YELLOW}This will deploy ${BOLD}${VERSION}${NC}${YELLOW} to production.${NC}"
+echo -e "${YELLOW}This will bump version ${BOLD}${CURRENT_VERSION} → ${VERSION}${NC}${YELLOW} and deploy to production.${NC}"
 read -p "Continue? (y/N) " -n 1 -r
 echo ""
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     echo "Aborted."
     exit 0
 fi
+
+# Commit and push version bump
+echo -e "${GREEN}Committing version bump...${NC}"
+git add VERSION
+git commit -m "Bump version to ${VERSION} [version-bump]"
+git push
 
 # Create and push tag
 echo -e "${GREEN}Creating tag ${TAG}...${NC}"
