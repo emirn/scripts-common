@@ -59,16 +59,11 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     exit 0
 fi
 
-# Commit and push version bump
-echo -e "${GREEN}Committing version bump...${NC}"
-git add VERSION
-git commit -m "Bump version to ${VERSION} [version-bump]"
-git push
-
-# Collect changelog between previous production tag and now
+# Collect changelog BEFORE committing (need previous tag before we create the new one)
 PREV_TAG=$(git tag -l "production-v*" --sort=-version:refname | head -1)
 if [ -n "$PREV_TAG" ]; then
     CHANGELOG=$(git log --oneline "$PREV_TAG"..HEAD --no-merges --invert-grep --grep='\[version-bump\]' | head -10)
+    FIRST_CHANGE=$(echo "$CHANGELOG" | head -1 | sed 's/^[a-f0-9]* //')
 else
     CHANGELOG="Initial release"
 fi
@@ -78,6 +73,19 @@ if [ -n "$CHANGELOG" ]; then
     echo "$CHANGELOG"
     echo ""
 fi
+
+# Commit and push version bump with descriptive subject
+echo -e "${GREEN}Committing version bump...${NC}"
+git add VERSION
+if [ -n "$FIRST_CHANGE" ]; then
+    SUBJECT="v${VERSION}: ${FIRST_CHANGE}"
+    # Truncate subject to 72 chars (git convention)
+    SUBJECT="${SUBJECT:0:72}"
+else
+    SUBJECT="v${VERSION}"
+fi
+git commit -m "$SUBJECT" -m "[version-bump]"
+git push
 
 # Create annotated tag with changelog
 echo -e "${GREEN}Creating tag ${TAG}...${NC}"
