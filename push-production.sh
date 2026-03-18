@@ -65,9 +65,23 @@ git add VERSION
 git commit -m "Bump version to ${VERSION} [version-bump]"
 git push
 
-# Create and push tag
+# Collect changelog between previous production tag and now
+PREV_TAG=$(git tag -l "production-v*" --sort=-version:refname | head -1)
+if [ -n "$PREV_TAG" ]; then
+    CHANGELOG=$(git log --oneline "$PREV_TAG"..HEAD --no-merges --invert-grep --grep='\[version-bump\]' | head -10)
+else
+    CHANGELOG="Initial release"
+fi
+
+if [ -n "$CHANGELOG" ]; then
+    echo -e "${GREEN}Changelog:${NC}"
+    echo "$CHANGELOG"
+    echo ""
+fi
+
+# Create annotated tag with changelog
 echo -e "${GREEN}Creating tag ${TAG}...${NC}"
-git tag "$TAG"
+git tag -a "$TAG" -m "$CHANGELOG"
 echo -e "${GREEN}Pushing tag to origin...${NC}"
 git push origin "$TAG"
 
