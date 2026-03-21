@@ -402,41 +402,21 @@ if [ "$NO_CLAUDE" = true ]; then
     echo -e "${GREEN}Done. To enter the worktree:${NC}"
     echo -e "  cd $WORKTREE_PATH"
 elif [ "$NEW_TAB" = true ]; then
-    TAB_NAME="${REPO_NAME}: ${DESCRIPTION}"
     CLAUDE_CMD="cd $(printf '%q' "$WORKTREE_PATH") && ${START_CMD[*]}"
 
-    echo -e "${GREEN}Opening new iTerm2 tab...${NC}"
-    echo -e "  Tab name: ${BLUE}$TAB_NAME${NC}"
-    echo -e "  Working directory: ${BLUE}$WORKTREE_PATH${NC}"
-    echo -e "  Command: ${YELLOW}${START_CMD[*]}${NC}"
-
-    # Build AppleScript — optionally include auto-type after delay
-    APPLESCRIPT="
-        tell application \"iTerm2\"
-            tell current window
-                create tab with default profile
-                tell current tab
-                    set name to \"${TAB_NAME}\"
-                end tell
-                tell current session
-                    write text \"${CLAUDE_CMD}\""
+    echo ""
+    echo -e "${GREEN}Worktree ready. Open a new terminal tab and run:${NC}"
+    echo ""
+    echo -e "  ${YELLOW}${CLAUDE_CMD}${NC}"
 
     if [ -n "$AUTO_TYPE" ]; then
-        # Escape backslashes and double quotes for AppleScript string
-        ESCAPED_AUTO_TYPE="${AUTO_TYPE//\\/\\\\}"
-        ESCAPED_AUTO_TYPE="${ESCAPED_AUTO_TYPE//\"/\\\"}"
-        APPLESCRIPT+="
-                    delay 3
-                    write text \"${ESCAPED_AUTO_TYPE}\""
+        echo ""
+        echo -e "${GREEN}Then paste this prompt into Claude:${NC}"
+        echo ""
+        echo -e "  ${BLUE}${AUTO_TYPE}${NC}"
     fi
 
-    APPLESCRIPT+="
-                end tell
-            end tell
-        end tell"
-
-    osascript -e "$APPLESCRIPT"
-    echo -e "${GREEN}Done. Claude is running in a new iTerm2 tab.${NC}"
+    echo ""
 else
     cd "$WORKTREE_PATH" || { echo -e "${RED}Error: Cannot cd to worktree path: $WORKTREE_PATH${NC}"; exit 1; }
 
