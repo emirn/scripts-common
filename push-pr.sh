@@ -1,15 +1,25 @@
 #!/bin/bash
 # push-pr.sh - Full PR workflow automation
-# Usage: ./push-pr.sh [--dir <path>] [--files <path>...] [--no-wait] "commit message"
 #
-# Creates a branch, commits all changes, pushes, creates PR, and merges.
-# Branch name is auto-generated from commit message: 2026jan12-16-43-first-four-words
+# Creates a branch, commits changes, pushes, creates PR, and merges.
+# Branch name is auto-generated from commit message.
 # Works from any git repo (main repo or submodule).
 #
-# Options:
+# USAGE:
+#   ./push-pr.sh --all "commit message"                  # stage everything
+#   ./push-pr.sh -a "commit message"                     # shorthand for --all
+#   ./push-pr.sh --files path1 path2 "commit message"    # stage specific files (space-separated)
+#   ./push-pr.sh --files "path1,path2" "commit message"  # stage specific files (comma-separated)
+#   ./push-pr.sh "commit message"                        # shows status + usage hint, then exits
+#
+# OPTIONS:
+#   --all, -a           Stage all changes (explicit opt-in)
+#   --files <paths>...  Stage only these files/dirs. Supports:
+#                          Space-separated: --files src/a.ts src/b.ts "msg"
+#                          Comma-separated: --files "src/a.ts,src/b.ts" "msg"
+#                          Mixed: --files "src/a.ts,src/b.ts" src/c.ts "msg"
 #   --dir <path>        Run in specified directory (e.g., a submodule)
-#   --files <paths>...  Only stage these files/folders (everything after --files until the last arg)
-#   --no-wait           Skip polling for merge completion (recommended for CI/automation)
+#   --no-wait           Skip polling for merge completion
 
 set -e
 
@@ -23,6 +33,20 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BOLD='\033[1m'
 NC='\033[0m' # No Color
+
+show_usage() {
+    echo -e "${BOLD}Usage:${NC}"
+    echo "  ./push-pr.sh --all \"commit message\"                  # stage everything"
+    echo "  ./push-pr.sh -a \"commit message\"                     # shorthand"
+    echo "  ./push-pr.sh --files path1 path2 \"commit message\"    # specific files"
+    echo "  ./push-pr.sh --files \"path1,path2\" \"commit message\"  # comma-separated"
+    echo ""
+    echo -e "${BOLD}Options:${NC}"
+    echo "  --all, -a           Stage all changes"
+    echo "  --files <paths>...  Stage only specified files/dirs"
+    echo "  --dir <path>        Run in a different directory"
+    echo "  --no-wait           Skip merge polling"
+}
 
 notify_merge_failure() {
     local pr_url="$1"
@@ -66,6 +90,7 @@ trap cleanup EXIT INT TERM
 # Handle options
 TARGET_DIR="."
 STAGE_FILES=()
+STAGE_ALL=false
 NO_WAIT=false
 
 while [ $# -gt 1 ]; do
@@ -78,11 +103,21 @@ while [ $# -gt 1 ]; do
             NO_WAIT=true
             shift
             ;;
+        --all|-a)
+            STAGE_ALL=true
+            shift
+            ;;
         --files)
             shift
             # Collect all args until the last one (which is the commit message)
             while [ $# -gt 1 ]; do
-                STAGE_FILES+=("$1")
+                # Split comma-separated values
+                IFS=',' read -ra PARTS <<< "$1"
+                for part in "${PARTS[@]}"; do
+                    # Trim whitespace
+                    part="$(echo -e "$part" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+                    [ -n "$part" ] && STAGE_FILES+=("$part")
+                done
                 shift
             done
             ;;
@@ -139,6 +174,23 @@ if [ -z "$(git status --porcelain)" ]; then
     exit 0
 fi
 
+# If neither --all nor --files specified, show status and exit with usage hint
+if [ "$STAGE_ALL" = false ] && [ ${#STAGE_FILES[@]} -eq 0 ]; then
+    echo ""
+    echo -e "${BOLD}Changed files:${NC}"
+    git status --short
+    echo ""
+    MSG="${1:-commit message}"
+    echo -e "${YELLOW}Specify which files to include:${NC}"
+    echo -e "  ./push-pr.sh ${GREEN}--all${NC} \"$MSG\"                           # stage everything"
+    # Show first changed file as example
+    FIRST_FILE=$(git status --porcelain | head -1 | sed 's/^...//')
+    echo -e "  ./push-pr.sh ${GREEN}--files${NC} $FIRST_FILE \"$MSG\"  # specific files"
+    echo ""
+    show_usage
+    exit 1
+fi
+
 # Set commit message and generate branch name
 MSG="${1:-Quick update}"
 BRANCH=$(generate_branch_name "$MSG")
@@ -148,7 +200,10 @@ git checkout -b "$BRANCH"
 ON_FEATURE_BRANCH=true
 
 if [ ${#STAGE_FILES[@]} -gt 0 ]; then
-    echo -e "${GREEN}Staging specified files: ${STAGE_FILES[*]}${NC}"
+    echo -e "${GREEN}Staging specified files:${NC}"
+    for f in "${STAGE_FILES[@]}"; do
+        echo -e "  ${f}"
+    done
     git add "${STAGE_FILES[@]}"
 else
     echo -e "${GREEN}Staging all changes...${NC}"
