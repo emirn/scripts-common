@@ -8,15 +8,18 @@ Reusable shell scripts for git workflow automation. Designed to work as a git su
 Full PR workflow automation - creates branch, commits, pushes, creates PR, and merges.
 
 ```bash
-./push-pr.sh "Your commit message"
-./push-pr.sh --dir /path/to/repo "Commit message"  # Run in different directory
+./push-pr.sh --all "Your commit message"                         # Stage everything (explicit)
+./push-pr.sh -a "Your commit message"                            # Shorthand for --all
 ./push-pr.sh --files src/app.ts src/utils.ts "Fix utils import"  # Stage specific files
-./push-pr.sh --no-wait --dir sites/example.com "Quick update"  # Fast mode (recommended for Claude)
+./push-pr.sh --files "src/app.ts,src/utils.ts" "Fix imports"     # Comma-separated paths
+./push-pr.sh --dir /path/to/repo -a "Commit message"             # Run in different directory
+./push-pr.sh "Some message"                                      # No flag = shows status + usage hint
 ```
 
 **Options:**
+- `--all`, `-a` — Stage all changes (must be explicit, no longer the default)
+- `--files <paths>...` — Stage only these files/dirs. Supports space-separated, comma-separated, or mixed
 - `--dir <path>` — Run in specified directory (e.g., a submodule)
-- `--files <paths>...` — Only stage these files/folders (everything after --files until the last arg)
 - `--no-wait` — Skip polling for merge completion (recommended for automation/Claude usage)
 
 **Requirements:**
