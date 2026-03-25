@@ -435,8 +435,8 @@ else
     fi
 
     # Interactive confirmation
-    echo -e "${GREEN}Ready to launch Claude Code${NC}"
-    echo -e "  Working directory: ${BLUE}$(pwd)${NC}"
+    echo -e "${GREEN}Ready to launch Claude Code in worktree:${NC}"
+    echo -e "  ${BLUE}$(pwd)${NC}"
     echo -e "  Command: ${YELLOW}${START_CMD[*]}${NC}"
     echo ""
     echo -e "Tip: Run ${YELLOW}/init${NC} inside Claude to set up project context."

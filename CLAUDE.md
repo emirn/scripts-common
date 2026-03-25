@@ -41,19 +41,19 @@ Full PR workflow automation - creates branch, commits, pushes, creates PR, and m
 
 **Failure recovery:** Traps EXIT, INT, and TERM signals. If interrupted while on the feature branch, automatically returns to `main` and prints cleanup instructions.
 
-### worktree-claude.sh
+### worktree.sh
 Creates a git worktree and launches Claude Code for parallel AI development.
 
 Claude always runs **interactively** (no `-p` flag). The `--prompt` and `--plan` flags control what gets auto-typed into the session after Claude starts.
 
 ```bash
-./worktree-claude.sh "feature description"
-./worktree-claude.sh --no-claude "description"                    # Don't launch Claude
-./worktree-claude.sh --dir /path/to/repo "desc"                  # Run in different directory
-./worktree-claude.sh --prompt "fix the login bug" "fix login"     # Auto-type prompt after start
-./worktree-claude.sh --plan ~/.claude/plans/my-plan.md "desc"     # Copy plan + auto-type instruction
-./worktree-claude.sh --plan ~/.claude/plans/my-plan.md --tab "d"  # Plan in new iTerm2 tab
-./worktree-claude.sh --cleanup                                    # Remove stale worktrees
+./worktree.sh "feature description"
+./worktree.sh --no-claude "description"                    # Don't launch Claude
+./worktree.sh --dir /path/to/repo "desc"                  # Run in different directory
+./worktree.sh --prompt "fix the login bug" "fix login"     # Auto-type prompt after start
+./worktree.sh --plan ~/.claude/plans/my-plan.md "desc"     # Copy plan + auto-type instruction
+./worktree.sh --plan ~/.claude/plans/my-plan.md --tab "d"  # Plan in new iTerm2 tab
+./worktree.sh --cleanup                                    # Remove stale worktrees
 ```
 
 **Options:**

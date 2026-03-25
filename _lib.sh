@@ -14,10 +14,11 @@ generate_branch_name() {
     # Date: 2026-feb-24-164312
     local datestamp=$(date +%Y-)$(date +%b | tr '[:upper:]' '[:lower:]')$(date +-%d-%H%M%S)
 
-    # Clean message: keep only alphanumeric and spaces, convert to lowercase
-    local clean_msg=$(echo "$msg" | tr -cd 'a-zA-Z0-9 ' | tr '[:upper:]' '[:lower:]')
+    # Clean message: keep only alphanumeric, spaces, and dashes, convert to lowercase
+    # Then normalize dashes to spaces so awk splits on both
+    local clean_msg=$(echo "$msg" | tr -cd 'a-zA-Z0-9 -' | tr '[:upper:]' '[:lower:]' | tr '-' ' ')
 
-    # Filter out stopwords and get first 6 meaningful words
+    # Filter out stopwords and get first 6 meaningful words, rejoin with dashes
     local words=$(echo "$clean_msg" | awk -v stops="$stopwords" '
         BEGIN {
             n = split(stops, arr)
@@ -49,7 +50,7 @@ short_name() {
     local max_words="${2:-3}"
     local stopwords="for with to in on at as is the a an and or but"
 
-    local clean_msg=$(echo "$msg" | tr -cd 'a-zA-Z0-9 ' | tr '[:upper:]' '[:lower:]')
+    local clean_msg=$(echo "$msg" | tr -cd 'a-zA-Z0-9 -' | tr '[:upper:]' '[:lower:]' | tr '-' ' ')
 
     echo "$clean_msg" | awk -v stops="$stopwords" -v max="$max_words" '
         BEGIN {
