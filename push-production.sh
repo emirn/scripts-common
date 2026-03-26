@@ -25,11 +25,22 @@ if [ "$CURRENT_BRANCH" != "main" ]; then
     exit 1
 fi
 
-# Must be clean
+# Stash local changes if any (we deploy what's on origin/main, not local state)
+DID_STASH=false
 if [ -n "$(git status --porcelain)" ]; then
-    echo -e "${RED}Error: Working directory not clean. Commit or stash changes first.${NC}"
-    exit 1
+    echo -e "${YELLOW}Stashing local changes...${NC}"
+    git stash push --include-untracked -m "push-production: auto-stash"
+    DID_STASH=true
 fi
+
+# Restore stash on exit (success or failure)
+cleanup() {
+    if [ "$DID_STASH" = true ]; then
+        echo -e "${GREEN}Restoring stashed changes...${NC}"
+        git stash pop || echo -e "${YELLOW}Warning: stash pop failed. Run 'git stash pop' manually.${NC}"
+    fi
+}
+trap cleanup EXIT
 
 # Pull latest
 echo -e "${GREEN}Pulling latest from main...${NC}"
