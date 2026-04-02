@@ -1,9 +1,12 @@
 #!/bin/bash
-# push-production.sh - Tag and deploy current VERSION to production
+# push-production.sh - Tag and deploy to production
 # Usage: ./push-production.sh
 #
-# Reads VERSION file, creates production-v{version} tag, pushes it.
-# This triggers the deploy-full-stack GitHub Actions workflow.
+# Computes next version from latest production tag, creates an annotated tag
+# on origin/main HEAD, and pushes it. This triggers the deploy-full-stack
+# GitHub Actions workflow.
+#
+# Does NOT modify the working tree — no stash, pull, commit, or VERSION file changes.
 
 set -e
 
@@ -25,82 +28,45 @@ if [ "$CURRENT_BRANCH" != "main" ]; then
     exit 1
 fi
 
-# Stash local changes if any (we deploy what's on origin/main, not local state)
-DID_STASH=false
-if [ -n "$(git status --porcelain)" ]; then
-    echo -e "${YELLOW}Stashing local changes...${NC}"
-    git stash push --include-untracked -m "push-production: auto-stash"
-    DID_STASH=true
+# Fetch latest from remote (no pull — don't touch working tree)
+echo -e "${GREEN}Fetching latest from origin...${NC}"
+git fetch origin main --tags --quiet
+
+# Compute next version from latest production tag
+LATEST_TAG=$(git tag -l "production-v*" --sort=-version:refname | head -1)
+if [ -z "$LATEST_TAG" ]; then
+    echo -e "${RED}Error: No existing production-v* tags found.${NC}"
+    exit 1
 fi
 
-# Restore stash on exit (success or failure)
-cleanup() {
-    if [ "$DID_STASH" = true ]; then
-        echo -e "${GREEN}Restoring stashed changes...${NC}"
-        git stash pop || echo -e "${YELLOW}Warning: stash pop failed. Run 'git stash pop' manually.${NC}"
-    fi
-}
-trap cleanup EXIT
-
-# Pull latest
-echo -e "${GREEN}Pulling latest from main...${NC}"
-git pull
-
-# Bump patch version
-CURRENT_VERSION=$(cat VERSION | tr -d '[:space:]')
+CURRENT_VERSION="${LATEST_TAG#production-v}"
 MAJOR=$(echo "$CURRENT_VERSION" | cut -d. -f1)
 MINOR=$(echo "$CURRENT_VERSION" | cut -d. -f2)
 PATCH=$(echo "$CURRENT_VERSION" | cut -d. -f3)
 VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
-echo "$VERSION" > VERSION
-
 TAG="production-v${VERSION}"
 
 echo -e "${BOLD}Current: ${CURRENT_VERSION}${NC}"
 echo -e "${BOLD}New:     ${VERSION}${NC}"
 echo -e "${BOLD}Tag:     ${TAG}${NC}"
 
-# Confirm
-echo ""
-echo -e "${YELLOW}This will bump version ${BOLD}${CURRENT_VERSION} → ${VERSION}${NC}${YELLOW} and deploy to production.${NC}"
-read -p "Continue? (y/N) " -n 1 -r
-echo ""
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Aborted."
-    exit 0
-fi
-
-# Collect changelog BEFORE committing (need previous tag before we create the new one)
-PREV_TAG=$(git tag -l "production-v*" --sort=-version:refname | head -1)
-if [ -n "$PREV_TAG" ]; then
-    CHANGELOG=$(git log --oneline "$PREV_TAG"..HEAD --no-merges --invert-grep --grep='\[version-bump\]' | head -10)
-    FIRST_CHANGE=$(echo "$CHANGELOG" | head -1 | sed 's/^[a-f0-9]* //')
-else
-    CHANGELOG="Initial release"
-fi
+# Collect changelog (commits since last production tag on origin/main)
+REMOTE_HEAD=$(git rev-parse origin/main)
+CHANGELOG=$(git log --oneline "$LATEST_TAG".."$REMOTE_HEAD" --no-merges --invert-grep --grep='\[version-bump\]' | head -10)
 
 if [ -n "$CHANGELOG" ]; then
     echo -e "${GREEN}Changelog:${NC}"
     echo "$CHANGELOG"
     echo ""
-fi
-
-# Commit and push version bump with descriptive subject
-echo -e "${GREEN}Committing version bump...${NC}"
-git add VERSION
-if [ -n "$FIRST_CHANGE" ]; then
-    SUBJECT="v${VERSION}: ${FIRST_CHANGE}"
-    # Truncate subject to 72 chars (git convention)
-    SUBJECT="${SUBJECT:0:72}"
 else
-    SUBJECT="v${VERSION}"
+    echo -e "${YELLOW}No new commits since ${LATEST_TAG}. Nothing to deploy.${NC}"
+    exit 0
 fi
-git commit -m "$SUBJECT" -m "[version-bump]"
-git push
 
-# Create annotated tag with changelog
-echo -e "${GREEN}Creating tag ${TAG}...${NC}"
-git tag -a "$TAG" -m "$CHANGELOG"
+# Create annotated tag on origin/main HEAD (not local HEAD)
+echo -e "${GREEN}Creating tag ${TAG} on origin/main...${NC}"
+git tag -a "$TAG" "$REMOTE_HEAD" -m "$CHANGELOG"
+
 echo -e "${GREEN}Pushing tag to origin...${NC}"
 git push origin "$TAG"
 
