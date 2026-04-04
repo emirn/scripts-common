@@ -40,7 +40,15 @@ generate_branch_name() {
     # Fallback if empty
     [ -z "$words" ] && words="update"
 
-    echo "${datestamp}-${words}"
+    # Cap total length at 80 chars, truncating at a dash boundary
+    local full="${datestamp}-${words}"
+    if [ ${#full} -gt 80 ]; then
+        full="${full:0:80}"
+        # Trim to last dash boundary to avoid cutting mid-word
+        full="${full%-*}"
+    fi
+
+    echo "$full"
 }
 
 # Extract first N meaningful words from a description (for short directory names)
