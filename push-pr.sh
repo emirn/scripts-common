@@ -216,7 +216,9 @@ echo -e "${GREEN}Pushing to origin...${NC}"
 git push --set-upstream origin "$BRANCH"
 
 echo -e "${GREEN}Creating PR...${NC}"
-PR_URL=$(gh pr create --repo "$REPO_FULL" --title "$MSG" --body "Automated PR via push-pr script" --base main)
+# Use first line of commit message as PR title (max 72 chars), full message as body
+PR_TITLE=$(echo "$MSG" | head -1 | cut -c1-72)
+PR_URL=$(gh pr create --repo "$REPO_FULL" --title "$PR_TITLE" --body "Automated PR via push-pr script" --base main)
 echo "$PR_URL"
 
 # KEY: Checkout main immediately after PR creation, before any merge attempt.
