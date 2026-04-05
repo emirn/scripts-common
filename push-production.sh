@@ -24,7 +24,7 @@ cd "$REPO_ROOT"
 # Fetch latest from remote (no pull — don't touch working tree).
 # Works from any branch — always tags origin/main HEAD, never uses local branch.
 CURRENT_BRANCH=$(git branch --show-current)
-echo -e "${GREEN}Fetching latest from origin... ${YELLOW}(on branch: ${CURRENT_BRANCH}, tagging: origin/main)${NC}"
+echo -e "${GREEN}Fetching refs from origin (origin/main + tags, no pull)... ${YELLOW}(on branch: ${CURRENT_BRANCH}, tagging: origin/main)${NC}"
 git fetch origin main --tags --quiet
 
 # Compute next version from latest production tag
