@@ -21,15 +21,10 @@ NC='\033[0m'
 REPO_ROOT=$(git rev-parse --show-toplevel)
 cd "$REPO_ROOT"
 
-# Must be on main
+# Fetch latest from remote (no pull — don't touch working tree).
+# Works from any branch — always tags origin/main HEAD, never uses local branch.
 CURRENT_BRANCH=$(git branch --show-current)
-if [ "$CURRENT_BRANCH" != "main" ]; then
-    echo -e "${RED}Error: Must be on 'main' branch. Currently on '$CURRENT_BRANCH'.${NC}"
-    exit 1
-fi
-
-# Fetch latest from remote (no pull — don't touch working tree)
-echo -e "${GREEN}Fetching latest from origin...${NC}"
+echo -e "${GREEN}Fetching latest from origin... ${YELLOW}(on branch: ${CURRENT_BRANCH}, tagging: origin/main)${NC}"
 git fetch origin main --tags --quiet
 
 # Compute next version from latest production tag
@@ -70,6 +65,16 @@ git tag -a "$TAG" "$REMOTE_HEAD" -m "$CHANGELOG"
 echo -e "${GREEN}Pushing tag to origin...${NC}"
 git push origin "$TAG"
 
+REPO_SLUG=$(git config --get remote.origin.url | sed 's|.*[:/]\([^/]*/[^/]*\)\.git$|\1|; s|.*[:/]\([^/]*/[^/]*\)$|\1|')
+
 echo ""
 echo -e "${GREEN}${BOLD}Done! Deployment triggered.${NC}"
-echo -e "${GREEN}Monitor: https://github.com/$(git config --get remote.origin.url | sed 's|.*[:/]\([^/]*/[^/]*\)\.git$|\1|; s|.*[:/]\([^/]*/[^/]*\)$|\1|')/actions${NC}"
+echo -e "${GREEN}Tagged origin/main (${REMOTE_HEAD:0:8}) as ${TAG}${NC}"
+echo -e "${GREEN}Monitor: https://github.com/${REPO_SLUG}/actions${NC}"
+echo ""
+echo -e "${BOLD}Manual alternatives:${NC}"
+echo -e "  ${YELLOW}# One-liner to tag and push:${NC}"
+echo -e "  git tag -a ${TAG} origin/main -m \"deploy\" && git push origin ${TAG}"
+echo -e ""
+echo -e "  ${YELLOW}# Via GitHub UI:${NC}"
+echo -e "  https://github.com/${REPO_SLUG}/releases/new?tag=${TAG}&target=main"
